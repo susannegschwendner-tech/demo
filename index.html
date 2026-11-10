@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2FA Demo – TAN-Generator & Authenticator</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+  body {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 20px; color: #333;
+  }
+  h1 { color: #fff; font-size: 1.5rem; margin-bottom: 6px; text-align: center; }
+  .subtitle { color: #e6e0ff; margin-bottom: 16px; text-align: center; font-size: 0.95rem; }
+
+  .mode-switch { display: flex; gap: 10px; margin-bottom: 18px; }
+  .mode-btn {
+    border: none; border-radius: 25px; padding: 10px 22px;
+    font-size: 1rem; font-weight: 600; cursor: pointer;
+    background: rgba(255,255,255,0.25); color: #fff; transition: all .2s;
+  }
+  .mode-btn.active { background: #fff; color: #5a3ea0; box-shadow: 0 4px 14px rgba(0,0,0,0.25); }
+
+  .stage { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; width: 100%; max-width: 900px; }
+
+  .card {
+    background: #fff; border-radius: 18px; padding: 22px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.25); width: 340px;
+  }
+  .card h2 { font-size: 1.05rem; margin-bottom: 4px; }
+  .card .small { color: #777; font-size: 0.8rem; margin-bottom: 14px; }
+
+  /* ---------- Login-Seite ---------- */
+  .login-brand { font-size: 1.4rem; margin-bottom: 2px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 0.78rem; color: #666; margin-bottom: 4px; }
+  .field input {
+    width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 10px;
+    font-size: 1rem; letter-spacing: 2px;
+  }
+  .field input:focus { outline: none; border-color: #667eea; }
+  .btn {
+    width: 100%; border: none; border-radius: 10px; padding: 12px;
+    font-size: 1rem; font-weight: 700; cursor: pointer; transition: all .2s;
+  }
+  .btn-primary { background: #667eea; color: #fff; }
+  .btn-primary:hover { background: #5568d3; }
+  .btn-ghost { background: #eee; color: #555; margin-top: 8px; font-weight: 600; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .msg { border-radius: 10px; padding: 10px 12px; font-size: 0.85rem; margin-top: 12px; display: none; }
+  .msg.error { display: block; background: #ffe8e8; color: #b4232f; border: 1px solid #f3b7bb; }
+  .msg.ok { display: block; background: #e7f8ec; color: #177245; border: 1px solid #a8e6bd; font-weight: 700; }
+
+  .step-tag { display: inline-block; background: #eef1ff; color: #5a3ea0; border-radius: 20px;
+    padding: 3px 12px; font-size: 0.75rem; font-weight: 700; margin-bottom: 10px; }
+
+  /* ---------- Geräte ---------- */
+  .device-body { display: flex; flex-direction: column; align-items: center; }
+
+  /* TAN-Generator (Schlüsselanhänger) */
+  .tan-device {
+    background: #2d2d3d; border-radius: 16px; padding: 18px 22px;
+    width: 230px; box-shadow: inset 0 0 0 2px #44455a, 0 8px 20px rgba(0,0,0,0.35);
+    color: #fff; text-align: center; position: relative;
+  }
+  .tan-device::before {
+    content: ''; position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+    width: 26px; height: 14px; border: 4px solid #888; border-bottom: none;
+    border-radius: 12px 12px 0 0;
+  }
+  .tan-display {
+    background: #d8f3b8; color: #203000; font-family: 'Courier New', monospace;
+    font-size: 1.6rem; font-weight: 700; letter-spacing: 6px; text-align: center;
+    border-radius: 8px; padding: 10px 6px; margin-bottom: 12px; min-height: 44px;
+  }
+  .tan-bar { height: 6px; background: #44455a; border-radius: 4px; overflow: hidden; margin-bottom: 12px; }
+  .tan-bar-fill { height: 100%; background: #8ec73f; width: 0%; transition: width 1s linear; }
+  .tan-btn {
+    border: none; border-radius: 10px; padding: 10px 20px; font-size: 0.95rem;
+    font-weight: 700; cursor: pointer; background: #ffb02e; color: #4a2c00;
+    box-shadow: 0 3px 0 #c47f00;
+  }
+  .tan-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #c47f00; }
+
+  /* Authenticator-Handy */
+  .phone {
+    background: #1c1c28; border-radius: 26px; padding: 12px;
+    width: 240px; box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+  }
+  .phone-screen { background: #fff; border-radius: 16px; overflow: hidden; }
+  .auth-header { background: #4285f4; color: #fff; padding: 10px 14px; font-size: 0.85rem; font-weight: 700; }
+  .auth-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px; border-bottom: 1px solid #eee;
+  }
+  .auth-row:last-child { border-bottom: none; }
+  .auth-name { font-size: 0.75rem; color: #666; }
+  .auth-code { font-family: 'Courier New', monospace; font-size: 1.35rem; font-weight: 700; letter-spacing: 3px; color: #1a73e8; }
+  .ring { width: 34px; height: 34px; position: relative; flex-shrink: 0; }
+  .ring svg { transform: rotate(-90deg); }
+  .ring .bg { stroke: #e0e0e0; }
+  .ring .fg { stroke: #4285f4; stroke-linecap: round; transition: stroke-dashoffset 1s linear; }
+  .ring span { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; color: #666; }
+
+  /* ---------- Info & Auftrag ---------- */
+  .info {
+    margin-top: 18px; background: rgba(255,255,255,0.95); border-radius: 14px;
+    padding: 14px 20px; max-width: 900px; font-size: 0.88rem; line-height: 1.5;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+  }
+  .info strong { color: #5a3ea0; }
+  .auftrag {
+    margin-top: 10px; background: #fff7dd; border: 1px dashed #d9b53c;
+    border-radius: 14px; padding: 12px 20px; max-width: 900px; font-size: 0.88rem;
+  }
+  .secret { font-family: 'Courier New', monospace; background: #f0ecff; padding: 1px 6px; border-radius: 6px; }
+
+  @media (max-width: 760px) { .card { width: 100%; max-width: 340px; } }
+</style>
+</head>
+<body>
+
+<h1>🔐 Zwei-Faktor-Authentifizierung live</h1>
+<p class="subtitle">Wie kommt der zweite Code auf dein Gerät? Probier beide Varianten aus!</p>
+
+<div class="mode-switch">
+  <button class="mode-btn active" id="btnTan" onclick="setMode('tan')">🎫 TAN-Generator</button>
+  <button class="mode-btn" id="btnAuth" onclick="setMode('auth')">📱 Authenticator-App</button>
+</div>
+
+<div class="stage">
+
+  <!-- Login-Karte -->
+  <div class="card" id="loginCard">
+    <div class="step-tag">Schritt 1: Dein Passwort</div>
+    <div class="login-brand">🏦 Meine Bank</div>
+    <div class="small">sicher-login.meinebank.at</div>
+
+    <div id="step1">
+      <div class="field">
+        <label>Benutzername – trag hier deinen eigenen Namen ein!</label>
+        <input type="text" id="userInput" value="" placeholder="z. B. mia.muster" autocomplete="off" oninput="nameUpdate()">
+      </div>
+      <div class="field">
+        <label>Passwort</label>
+        <input type="password" value="pfirsichbanane" readonly>
+      </div>
+      <button class="btn btn-primary" onclick="zumCode()">Einloggen →</button>
+    </div>
+
+    <div id="step2" style="display:none;">
+      <div class="step-tag">Schritt 2: Dein zweiter Faktor</div>
+      <div class="small" style="margin-bottom:10px;">
+        <span id="modeHint">Drücke den Knopf auf deinem TAN-Generator und tippe den Code ein!</span>
+      </div>
+      <div class="field">
+        <label>6-stelliger Code</label>
+        <input type="text" id="codeInput" maxlength="6" inputmode="numeric" placeholder="––––––" autocomplete="off">
+      </div>
+      <button class="btn btn-primary" id="confirmBtn" onclick="pruefe()">Bestätigen</button>
+      <button class="btn btn-ghost" onclick="resetLogin()">← Zurück</button>
+      <div class="msg" id="msg"></div>
+    </div>
+
+    <div id="done" style="display:none; text-align:center;">
+      <div style="font-size:3rem;">✅</div>
+      <h2 style="margin:8px 0;" id="doneTitle">Eingeloggt!</h2>
+      <p class="small">Passwort (Wissen) + Code vom Gerät (Besitz) = Zwei-Faktor-Authentifizierung.<br>
+      Ein Dieb mit deinem Passwort hätte hier keine Chance.</p>
+      <button class="btn btn-primary" onclick="resetLogin()" style="margin-top:10px;">Nochmal spielen</button>
+    </div>
+  </div>
+
+  <!-- Geräte-Karte -->
+  <div class="card device-body">
+    <div class="step-tag" id="deviceTag">Dein Gerät</div>
+    <h2 id="deviceTitle">TAN-Generator</h2>
+    <div class="small" id="deviceSub">(wie ihn Banken ausgeben)</div>
+
+    <!-- TAN-Generator -->
+    <div class="tan-device" id="tanDevice">
+      <div class="tan-display" id="tanDisplay">––––––</div>
+      <div class="tan-bar"><div class="tan-bar-fill" id="tanBar"></div></div>
+      <button class="tan-btn" onclick="tanDruecken()">Code anzeigen</button>
+    </div>
+
+    <!-- Authenticator-Handy -->
+    <div class="phone" id="authDevice" style="display:none;">
+      <div class="phone-screen">
+        <div class="auth-header">Authenticator</div>
+        <div class="auth-row">
+          <div><div class="auth-name" id="authName1">Meine Bank · …</div><div class="auth-code" id="authCode1">------</div></div>
+          <div class="ring"><svg width="34" height="34"><circle class="bg" cx="17" cy="17" r="14" fill="none" stroke-width="4"/><circle class="fg" id="ring1" cx="17" cy="17" r="14" fill="none" stroke-width="4" stroke-dasharray="88" stroke-dashoffset="0"/></svg><span id="ringT1"></span></div>
+        </div>
+        <div class="auth-row">
+          <div><div class="auth-name" id="authName2">Instagram · …</div><div class="auth-code" id="authCode2" style="color:#888;">------</div></div>
+          <div class="ring"><svg width="34" height="34"><circle class="bg" cx="17" cy="17" r="14" fill="none" stroke-width="4"/><circle class="fg" id="ring2" cx="17" cy="17" r="14" fill="none" stroke-width="4" stroke-dasharray="88" stroke-dashoffset="0"/></svg><span id="ringT2"></span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="small" style="margin-top:14px; text-align:center;" id="deviceInfo">
+      Der Generator kennt das Geheimnis <span class="secret">BANANE-42</span> –<br>
+      genau wie der Server der Bank. <strong>Nur der Code reist!</strong>
+    </div>
+  </div>
+</div>
+
+<div class="info">
+  💡 <strong>So funktioniert's:</strong> Gerät und Server rechnen aus dem gemeinsamen Geheimnis
+  <span class="secret">BANANE-42</span> + der Uhrzeit denselben Code – deshalb stimmen sie überein,
+  ohne dass das Geheimnis je übertragen wird. Der Code ist nur <strong>30 Sekunden</strong> gültig!
+</div>
+<div class="auftrag">
+  🎯 <strong>Dein Auftrag:</strong> Logge dich ein und hol dir den Code vom Gerät.
+  <strong>Extra:</strong> Lass den Code einmal absichtlich ablaufen und tippe ihn dann ein – was passiert?
+  Bei der App: Einen fremden Account-Code eintippen – geht der auch?
+</div>
+
+<script>
+  var mode = 'tan';
+  var tanCode = null, tanAblauf = 0;
+  var authCodes = { 1: null, 2: null };
+  var geheimnis = 'BANANE-42';
+
+  function zufallsCode() {
+    return String(Math.floor(100000 + Math.random() * 900000));
+  }
+
+  function setMode(m) {
+    mode = m;
+    document.getElementById('btnTan').classList.toggle('active', m === 'tan');
+    document.getElementById('btnAuth').classList.toggle('active', m === 'auth');
+    document.getElementById('tanDevice').style.display = m === 'tan' ? 'block' : 'none';
+    document.getElementById('authDevice').style.display = m === 'auth' ? 'block' : 'none';
+    document.getElementById('deviceTitle').textContent = m === 'tan' ? 'TAN-Generator' : 'Authenticator-App';
+    document.getElementById('deviceSub').textContent = m === 'tan' ? '(wie ihn Banken ausgeben)' : '(z. B. Google Authenticator)';
+    document.getElementById('modeHint').textContent = m === 'tan'
+      ? 'Drücke den Knopf auf deinem TAN-Generator und tippe den Code ein!'
+      : 'Schau auf die Authenticator-App und tippe den Code von „Meine Bank" ein – schnell, er läuft ab!';
+    document.getElementById('deviceInfo').innerHTML = m === 'tan'
+      ? 'Der Generator kennt das Geheimnis <span class="secret">BANANE-42</span> –<br>genau wie der Server der Bank. <strong>Nur der Code reist!</strong>'
+      : 'Die App kennt je Account ein Geheimnis –<br>darum hat jeder Account seinen <strong>eigenen Code</strong>.';
+    resetLogin();
+  }
+
+  function nameUpdate() {
+    var n = document.getElementById('userInput').value.trim() || '…';
+    document.getElementById('authName1').textContent = 'Meine Bank · ' + n;
+    document.getElementById('authName2').textContent = 'Instagram · ' + n.toLowerCase().replace(/\s+/g, '_');
+  }
+
+  function zumCode() {
+    if (!document.getElementById('userInput').value.trim()) {
+      document.getElementById('userInput').focus();
+      document.getElementById('userInput').style.borderColor = '#e8452c';
+      return;
+    }
+    document.getElementById('userInput').style.borderColor = '#ddd';
+    document.getElementById('step1').style.display = 'none';
+    document.getElementById('step2').style.display = 'block';
+    document.getElementById('codeInput').focus();
+  }
+
+  function resetLogin() {
+    document.getElementById('step1').style.display = 'block';
+    document.getElementById('step2').style.display = 'none';
+    document.getElementById('done').style.display = 'none';
+    document.getElementById('codeInput').value = '';
+    var msg = document.getElementById('msg');
+    msg.className = 'msg'; msg.textContent = '';
+  }
+
+  function zeigMsg(text, ok) {
+    var msg = document.getElementById('msg');
+    msg.className = 'msg ' + (ok ? 'ok' : 'error');
+    msg.textContent = text;
+  }
+
+  // ---- TAN-Generator ----
+  function tanDruecken() {
+    tanCode = zufallsCode();
+    tanAblauf = Date.now() + 30000;
+    document.getElementById('tanDisplay').textContent = tanCode;
+  }
+
+  // ---- Authenticator: Codes rotieren alle 30s ----
+  var authStart = Math.floor(Date.now() / 30000) * 30000;
+  function authRotieren() {
+    authCodes[1] = zufallsCode();
+    authCodes[2] = zufallsCode();
+    authStart = Math.floor(Date.now() / 30000) * 30000;
+    document.getElementById('authCode1').textContent = authCodes[1];
+    document.getElementById('authCode2').textContent = authCodes[2];
+  }
+  authRotieren();
+  setInterval(authRotieren, 30000);
+
+  // Countdown-Animationen
+  setInterval(function () {
+    // TAN-Bar
+    var rest = Math.max(0, tanAblauf - Date.now());
+    document.getElementById('tanBar').style.width = (rest / 30000 * 100) + '%';
+    if (rest === 0 && tanCode) {
+      document.getElementById('tanDisplay').textContent = '––––––';
+      tanCode = null;
+    }
+    // Auth-Ringe
+    var sek = 30 - Math.floor((Date.now() - authStart) / 1000);
+    ['1', '2'].forEach(function (n) {
+      var c = document.getElementById('ring' + n);
+      c.style.strokeDashoffset = 88 - (88 * sek / 30);
+      c.style.stroke = sek <= 5 ? '#e8452c' : '#4285f4';
+      document.getElementById('ringT' + n).textContent = sek;
+    });
+  }, 1000);
+
+  // ---- Prüfen ----
+  function pruefe() {
+    var eingabe = document.getElementById('codeInput').value.trim();
+    if (eingabe.length !== 6 || !/^\d+$/.test(eingabe)) {
+      zeigMsg('Der Code hat 6 Ziffern – schau nochmal genau hin!', false);
+      return;
+    }
+    if (mode === 'tan') {
+      if (!tanCode) {
+        zeigMsg('Zu spät! Der Code ist abgelaufen (30 Sekunden). Drück den Knopf neu!', false);
+      } else if (eingabe === tanCode) {
+        erfolg();
+      } else {
+        zeigMsg('Falscher Code – vergleiche die Anzeige am Gerät genau!', false);
+      }
+    } else {
+      if (eingabe === authCodes[2] && eingabe !== authCodes[1]) {
+        zeigMsg('Das ist der Code von Instagram – nicht von der Bank! Jeder Account hat seinen eigenen.', false);
+      } else if (eingabe === authCodes[1]) {
+        erfolg();
+      } else {
+        zeigMsg('Falscher oder abgelaufener Code – schau auf die Uhr im Kreis!', false);
+      }
+    }
+  }
+
+  function erfolg() {
+    var n = document.getElementById('userInput').value.trim();
+    document.getElementById('doneTitle').textContent = n ? 'Eingeloggt, ' + n + '!' : 'Eingeloggt!';
+    document.getElementById('step2').style.display = 'none';
+    document.getElementById('done').style.display = 'block';
+  }
+
+  document.getElementById('codeInput').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') pruefe();
+  });
+</script>
+</body>
+</html>
